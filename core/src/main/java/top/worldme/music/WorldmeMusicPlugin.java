@@ -8,7 +8,6 @@ import top.worldme.music.command.MusicCommand;
 import top.worldme.music.config.PluginConfig;
 import top.worldme.music.listener.PlayerListener;
 import top.worldme.music.login.LoginManager;
-import top.worldme.music.login.QrImageServer;
 import top.worldme.music.mod.ZMusicMessenger;
 import top.worldme.music.queue.MusicQueue;
 import top.worldme.music.queue.VoteSkipManager;
@@ -25,7 +24,6 @@ public class WorldmeMusicPlugin extends JavaPlugin {
 
     private PluginConfig pluginConfig;
     private NeteaseClient neteaseClient;
-    private QrImageServer qrImageServer;
     private LoginManager loginManager;
     private ZMusicMessenger zMusicMessenger;
     private MusicQueue musicQueue;
@@ -40,20 +38,12 @@ public class WorldmeMusicPlugin extends JavaPlugin {
         saveDefaultConfig();
         this.pluginConfig = new PluginConfig(getDataFolder());
 
-        this.qrImageServer = new QrImageServer(pluginConfig);
-        try {
-            qrImageServer.start();
-            getLogger().info("二维码图片服务器已启动，端口：" + pluginConfig.getQrServerPort());
-        } catch (Exception e) {
-            getLogger().warning("二维码图片服务器启动失败: " + e.getMessage());
-        }
-
         this.neteaseClient = new NeteaseClient(pluginConfig);
         this.zMusicMessenger = new ZMusicMessenger(this, pluginConfig);
         this.musicQueue = new MusicQueue(this, pluginConfig, neteaseClient, zMusicMessenger);
         this.voteSkipManager = new VoteSkipManager(this, pluginConfig, musicQueue);
         this.musicQueue.setVoteSkipManager(voteSkipManager);
-        this.loginManager = new LoginManager(this, pluginConfig, neteaseClient, qrImageServer);
+        this.loginManager = new LoginManager(this, pluginConfig, neteaseClient);
         this.neteaseClient.setLoginManager(loginManager);
         this.musicCommand = new MusicCommand(this, pluginConfig, neteaseClient, musicQueue, voteSkipManager, loginManager);
 
@@ -72,9 +62,6 @@ public class WorldmeMusicPlugin extends JavaPlugin {
         }
         if (loginManager != null) {
             loginManager.cancelActiveSession();
-        }
-        if (qrImageServer != null) {
-            qrImageServer.stop();
         }
         getLogger().info("WorldmeMusic 已卸载");
     }
@@ -114,10 +101,6 @@ public class WorldmeMusicPlugin extends JavaPlugin {
 
     public NeteaseClient getNeteaseClient() {
         return neteaseClient;
-    }
-
-    public QrImageServer getQrImageServer() {
-        return qrImageServer;
     }
 
     public LoginManager getLoginManager() {

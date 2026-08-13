@@ -121,6 +121,9 @@ public class NeteaseClient {
                 .build();
         return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenApply(response -> {
+                    if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                        throw new RuntimeException("HTTP " + response.statusCode());
+                    }
                     String body = response.body();
                     if (body == null || body.isBlank()) {
                         return new JsonObject();
@@ -130,7 +133,11 @@ public class NeteaseClient {
     }
 
     private String buildUrl(String path) {
-        StringBuilder sb = new StringBuilder(config.getApiBaseUrl());
+        String baseUrl = config.getApiBaseUrl();
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+        StringBuilder sb = new StringBuilder(baseUrl);
         if (path.startsWith("/")) {
             sb.append(path);
         } else {
@@ -245,8 +252,31 @@ public class NeteaseClient {
         int code = JsonUtil.getInt(json, "code", 800);
         String cookie = JsonUtil.getString(json, "cookie", "");
         JsonObject profile = JsonUtil.getObject(json, "profile");
+
+        // 某些 API 会把二维码状态包装在 data 字段中
+        JsonObject data = JsonUtil.getObject(json, "data");
+        if (data.has("code")) {
+            int dataCode = JsonUtil.getInt(data, "code", code);
+            if (dataCode == 200) {
+                code = 803; // 登录成功
+            } else if (dataCode == 800 || dataCode == 801 || dataCode == 802 || dataCode == 803) {
+                code = dataCode;
+            }
+        }
+        if (cookie.isBlank()) {
+            cookie = JsonUtil.getString(data, "cookie", "");
+        }
+        JsonObject dataProfile = JsonUtil.getObject(data, "profile");
+        if (dataProfile.has("nickname") || dataProfile.has("userId")) {
+            profile = dataProfile;
+        }
+
         String nickname = JsonUtil.getString(profile, "nickname", "");
         long userId = JsonUtil.getLong(profile, "userId", 0);
+        if (userId == 0) {
+            JsonObject account = JsonUtil.getObject(data, "account");
+            userId = JsonUtil.getLong(account, "id", 0);
+        }
         return new QrCheckResult(code, cookie, nickname, userId);
     }
 

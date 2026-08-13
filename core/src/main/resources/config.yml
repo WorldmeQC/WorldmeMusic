@@ -1,4 +1,4 @@
-prefix: "&b[WorldmeMusic] &r"
+prefix: "<aqua>[WorldmeMusic] <reset>"
 
 api:
   base-url: "http://localhost:3000"
@@ -8,9 +8,6 @@ api:
 
 login:
   enabled: true
-  qr-server-port: 8123
-  qr-server-host: "0.0.0.0"
-  qr-public-host: ""
   poll-interval: 3
   qr-timeout: 180
   qr-cell-size: 4

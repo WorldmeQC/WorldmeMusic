@@ -1,26 +1,29 @@
 package top.worldme.music.login;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.MapMeta;
+import org.bukkit.map.MapView;
 import org.bukkit.scheduler.BukkitTask;
 import top.worldme.music.WorldmeMusicPlugin;
 import top.worldme.music.api.NeteaseClient;
 import top.worldme.music.config.PluginConfig;
 import top.worldme.music.model.AccountInfo;
 import top.worldme.music.util.TextUtil;
-import top.worldmeqc.qrcode.QRCode;
-import top.worldmeqc.qrcode.enums.ErrorCorrectionLevel;
-import top.worldmeqc.qrcode.utils.ImageUtil;
+import top.mrxiaom.qrcode.QRCode;
+import top.mrxiaom.qrcode.enums.ErrorCorrectionLevel;
+import top.mrxiaom.qrcode.utils.ImageUtil;
 
-import javax.imageio.ImageIO;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
-import java.util.Enumeration;
 
 /**
  * 网易云登录管理器（全局一个 VIP 账号）。
@@ -33,18 +36,16 @@ public class LoginManager {
     private final WorldmeMusicPlugin plugin;
     private final PluginConfig config;
     private final NeteaseClient neteaseClient;
-    private final QrImageServer qrImageServer;
     private final File loginFile;
     private final AccountInfo accountInfo;
 
     private QRLoginSession activeSession;
 
     public LoginManager(WorldmeMusicPlugin plugin, PluginConfig config,
-                        NeteaseClient neteaseClient, QrImageServer qrImageServer) {
+                        NeteaseClient neteaseClient) {
         this.plugin = plugin;
         this.config = config;
         this.neteaseClient = neteaseClient;
-        this.qrImageServer = qrImageServer;
         this.loginFile = new File(plugin.getDataFolder(), "login.yml");
         this.accountInfo = new AccountInfo();
         load();
@@ -88,53 +89,50 @@ public class LoginManager {
 
     public void startQrLogin(Player admin) {
         if (!config.isLoginEnabled()) {
-            admin.sendMessage(TextUtil.message(config.getPrefix(), "&c登录模块未启用。"));
+            admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>登录模块未启用。"));
             return;
         }
         // 取消旧会话
         if (activeSession != null) {
             activeSession.cancel();
-            qrImageServer.unregister(activeSession.getToken());
             activeSession = null;
         }
 
-        admin.sendMessage(TextUtil.message(config.getPrefix(), "&e正在生成二维码，请稍候..."));
+        admin.sendMessage(TextUtil.message(config.getPrefix(), "<yellow>正在生成二维码，请稍候..."));
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 String key = neteaseClient.qrLoginKey().join();
                 if (key == null || key.isBlank()) {
                     Bukkit.getScheduler().runTask(plugin, () ->
-                            admin.sendMessage(TextUtil.message(config.getPrefix(), "&c获取二维码 key 失败。")));
+                            admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>获取二维码 key 失败。")));
                     return;
                 }
                 String qrUrl = neteaseClient.qrLoginCreate(key).join();
                 if (qrUrl == null || qrUrl.isBlank()) {
                     Bukkit.getScheduler().runTask(plugin, () ->
-                            admin.sendMessage(TextUtil.message(config.getPrefix(), "&c生成二维码失败。")));
+                            admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>生成二维码失败。")));
                     return;
                 }
 
-                BufferedImage image = generateQrImage(qrUrl);
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                ImageIO.write(image, "png", baos);
-                byte[] png = baos.toByteArray();
+                BufferedImage qrImage = generateQrImage(qrUrl);
+                BufferedImage mapImage = scaleToMapSize(qrImage, 128);
 
                 Bukkit.getScheduler().runTask(plugin, () -> {
-                    String token = qrImageServer.register(png);
-                    QRLoginSession session = new QRLoginSession(key, qrUrl, token);
+                    QRLoginSession session = new QRLoginSession(key, qrUrl);
                     activeSession = session;
-                    String publicUrl = getPublicUrl(token);
+                    int mapId = giveQrMap(admin, mapImage);
+                    session.setMapId(mapId);
                     admin.sendMessage(TextUtil.message(config.getPrefix(),
-                            "&a请点击下方链接，使用网易云 App 扫码登录："));
-                    admin.sendMessage("&b" + publicUrl);
+                            "<green>已发放二维码地图，请打开背包查看并使用网易云 App 扫码。"));
                     admin.sendMessage(TextUtil.message(config.getPrefix(),
-                            "&7二维码有效期 &e" + (config.getQrTimeout() / 60) + " &7分钟。"));
+                            "<gray>二维码有效期 <yellow>" + (config.getQrTimeout() / 60) + " <gray>分钟。"));
                     startPolling(session, admin);
                 });
             } catch (Exception e) {
                 Bukkit.getScheduler().runTask(plugin, () ->
-                        admin.sendMessage(TextUtil.message(config.getPrefix(), "&c生成二维码异常: " + e.getMessage())));
+                        admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>生成二维码异常: ")
+                                .append(Component.text(e.getMessage(), NamedTextColor.RED))));
                 plugin.getLogger().warning("生成二维码异常: " + e.getMessage());
                 if (config.isDebug()) {
                     e.printStackTrace();
@@ -150,6 +148,59 @@ public class LoginManager {
         return ImageUtil.createImage(qr, cellSize, margin);
     }
 
+    private BufferedImage scaleToMapSize(BufferedImage source, int size) {
+        if (source.getWidth() == size && source.getHeight() == size) {
+            return source;
+        }
+        BufferedImage scaled = new BufferedImage(size, size, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = scaled.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        g.drawImage(source, 0, 0, size, size, null);
+        g.dispose();
+        return scaled;
+    }
+
+    private int giveQrMap(Player player, BufferedImage image) {
+        MapView view = Bukkit.createMap(player.getWorld());
+        view.getRenderers().forEach(view::removeRenderer);
+        view.addRenderer(new QrMapRenderer(image));
+
+        ItemStack mapItem = new ItemStack(Material.FILLED_MAP);
+        MapMeta meta = (MapMeta) mapItem.getItemMeta();
+        if (meta != null) {
+            meta.setMapId(view.getId());
+            mapItem.setItemMeta(meta);
+        }
+
+        if (player.getInventory().firstEmpty() == -1) {
+            player.getWorld().dropItemNaturally(player.getLocation(), mapItem);
+            player.sendMessage(TextUtil.message(config.getPrefix(), "<yellow>背包已满，二维码地图已掉落在脚下。"));
+        } else {
+            player.getInventory().addItem(mapItem);
+        }
+        return view.getId();
+    }
+
+    private void removeQrMap(Player player, int mapId) {
+        if (mapId < 0 || player == null) {
+            return;
+        }
+        org.bukkit.inventory.PlayerInventory inv = player.getInventory();
+        for (int i = 0; i < inv.getSize(); i++) {
+            ItemStack item = inv.getItem(i);
+            if (item == null || item.getType() != Material.FILLED_MAP) {
+                continue;
+            }
+            if (!(item.getItemMeta() instanceof MapMeta meta)) {
+                continue;
+            }
+            if (meta.hasMapId() && meta.getMapId() == mapId) {
+                inv.setItem(i, null);
+                return;
+            }
+        }
+    }
+
     private void startPolling(QRLoginSession session, Player admin) {
         long intervalTicks = Math.max(20L, config.getPollInterval() * 20L);
         BukkitTask task = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, () -> {
@@ -159,10 +210,9 @@ public class LoginManager {
             }
             if (System.currentTimeMillis() - session.getCreatedAt() > config.getQrTimeout() * 1000L) {
                 Bukkit.getScheduler().runTask(plugin, () -> {
-                    admin.sendMessage(TextUtil.message(config.getPrefix(), "&c二维码已过期，请重新执行 /music login qr。"));
+                    admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>二维码已过期，请重新执行 /music login qr。"));
                 });
                 session.cancel();
-                qrImageServer.unregister(session.getToken());
                 return;
             }
             try {
@@ -176,18 +226,18 @@ public class LoginManager {
                             // 等待扫码，无需提示
                         }
                         case 802 -> {
-                            admin.sendMessage(TextUtil.message(config.getPrefix(), "&e等待确认..."));
+                            admin.sendMessage(TextUtil.message(config.getPrefix(), "<yellow>等待确认..."));
                         }
                         case 800 -> {
                             session.cancel();
-                            qrImageServer.unregister(session.getToken());
-                            admin.sendMessage(TextUtil.message(config.getPrefix(), "&c二维码已过期，请重新生成。"));
+                            admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>二维码已过期，请重新生成。"));
                         }
                         case 803 -> {
                             session.cancel();
-                            qrImageServer.unregister(session.getToken());
+                            removeQrMap(admin, session.getMapId());
                             saveLogin(result.getCookie(), result.getNickname(), result.getUserId());
-                            admin.sendMessage(TextUtil.message(config.getPrefix(), "&a登录成功！昵称: " + result.getNickname()));
+                            admin.sendMessage(TextUtil.message(config.getPrefix(), "<green>登录成功！昵称: ")
+                                    .append(Component.text(result.getNickname(), NamedTextColor.WHITE)));
                         }
                         default -> {
                             // 未知状态，忽略
@@ -212,28 +262,30 @@ public class LoginManager {
     public void cancelActiveSession() {
         if (activeSession != null) {
             activeSession.cancel();
-            qrImageServer.unregister(activeSession.getToken());
             activeSession = null;
         }
     }
 
     public void printStatus(Player admin) {
         if (!isLoggedIn()) {
-            admin.sendMessage(TextUtil.message(config.getPrefix(), "&7当前未登录。"));
+            admin.sendMessage(TextUtil.message(config.getPrefix(), "<gray>当前未登录。"));
             return;
         }
-        admin.sendMessage(TextUtil.message(config.getPrefix(), "&a已登录账号"));
-        admin.sendMessage("&7昵称: &f" + accountInfo.getNickname());
-        admin.sendMessage("&7用户 ID: &f" + accountInfo.getUserId());
-        admin.sendMessage("&7登录时间: &f" + formatTime(accountInfo.getLoginTime()));
+        admin.sendMessage(TextUtil.message(config.getPrefix(), "<green>已登录账号"));
+        admin.sendMessage(Component.text("昵称: ", NamedTextColor.GRAY)
+                .append(Component.text(accountInfo.getNickname(), NamedTextColor.WHITE)));
+        admin.sendMessage(Component.text("用户 ID: ", NamedTextColor.GRAY)
+                .append(Component.text(String.valueOf(accountInfo.getUserId()), NamedTextColor.WHITE)));
+        admin.sendMessage(Component.text("登录时间: ", NamedTextColor.GRAY)
+                .append(Component.text(formatTime(accountInfo.getLoginTime()), NamedTextColor.WHITE)));
     }
 
     public void refresh(Player admin) {
         if (!isLoggedIn()) {
-            admin.sendMessage(TextUtil.message(config.getPrefix(), "&c当前未登录，无法刷新。"));
+            admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>当前未登录，无法刷新。"));
             return;
         }
-        admin.sendMessage(TextUtil.message(config.getPrefix(), "&e正在刷新登录..."));
+        admin.sendMessage(TextUtil.message(config.getPrefix(), "<yellow>正在刷新登录..."));
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 boolean ok = neteaseClient.refreshLogin().join();
@@ -241,14 +293,15 @@ public class LoginManager {
                     if (ok) {
                         accountInfo.setLoginTime(System.currentTimeMillis());
                         save();
-                        admin.sendMessage(TextUtil.message(config.getPrefix(), "&a刷新成功。"));
+                        admin.sendMessage(TextUtil.message(config.getPrefix(), "<green>刷新成功。"));
                     } else {
-                        admin.sendMessage(TextUtil.message(config.getPrefix(), "&c刷新失败，请重新登录。"));
+                        admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>刷新失败，请重新登录。"));
                     }
                 });
             } catch (Exception e) {
                 Bukkit.getScheduler().runTask(plugin, () ->
-                        admin.sendMessage(TextUtil.message(config.getPrefix(), "&c刷新异常: " + e.getMessage())));
+                        admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>刷新异常: ")
+                                .append(Component.text(e.getMessage(), NamedTextColor.RED))));
             }
         });
     }
@@ -260,35 +313,7 @@ public class LoginManager {
         accountInfo.setLoginTime(0);
         save();
         if (admin != null) {
-            admin.sendMessage(TextUtil.message(config.getPrefix(), "&a已清除登录状态。"));
-        }
-    }
-
-    private String getPublicUrl(String token) {
-        String host = config.getQrPublicHost();
-        if (host == null || host.isBlank()) {
-            host = getLocalIp();
-        }
-        return "http://" + host + ":" + config.getQrServerPort() + "/qr/" + token + ".png";
-    }
-
-    private String getLocalIp() {
-        try {
-            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-            while (interfaces.hasMoreElements()) {
-                NetworkInterface ni = interfaces.nextElement();
-                Enumeration<InetAddress> addresses = ni.getInetAddresses();
-                while (addresses.hasMoreElements()) {
-                    InetAddress addr = addresses.nextElement();
-                    if (!addr.isLoopbackAddress() && !addr.isLinkLocalAddress() && addr.isSiteLocalAddress()) {
-                        return addr.getHostAddress();
-                    }
-                }
-            }
-            InetAddress fallback = InetAddress.getLocalHost();
-            return fallback.getHostAddress();
-        } catch (Exception e) {
-            return "127.0.0.1";
+            admin.sendMessage(TextUtil.message(config.getPrefix(), "<green>已清除登录状态。"));
         }
     }
 

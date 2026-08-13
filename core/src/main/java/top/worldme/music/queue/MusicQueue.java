@@ -1,5 +1,7 @@
 package top.worldme.music.queue;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import top.worldme.music.WorldmeMusicPlugin;
@@ -50,7 +52,7 @@ public class MusicQueue {
 
     public void add(Track track, Player requester) {
         if (queue.size() >= config.getQueueMaxSize()) {
-            requester.sendMessage(TextUtil.message(config.getPrefix(), "&c播放队列已满。"));
+            requester.sendMessage(TextUtil.message(config.getPrefix(), "<red>播放队列已满。"));
             return;
         }
         QueuedTrack queued = new QueuedTrack(track, requester);
@@ -59,7 +61,7 @@ public class MusicQueue {
             playNext();
         } else {
             queue.add(queued);
-            requester.sendMessage(TextUtil.message(config.getPrefix(), "&a已加入队列，当前排在第 &e" + queue.size() + " &a位。"));
+            requester.sendMessage(TextUtil.message(config.getPrefix(), "<green>已加入队列，当前排在第 <yellow>" + queue.size() + " <green>位。"));
         }
     }
 
@@ -80,7 +82,7 @@ public class MusicQueue {
         if (voteSkipManager != null && voteSkipManager.isVoting()) {
             // 强制切歌时直接结束投票
         }
-        Bukkit.broadcastMessage(TextUtil.message(config.getPrefix(), "&e管理员强制切歌。"));
+        Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<yellow>管理员强制切歌。"), null);
         playNext();
     }
 
@@ -111,8 +113,12 @@ public class MusicQueue {
         playing = true;
         consecutiveFails = 0;
 
-        Bukkit.broadcastMessage(TextUtil.message(config.getPrefix(),
-                "&e正在播放：&f" + track.getName() + " &7- " + track.getArtists() + " &e点歌人：&f" + track.getRequesterName()));
+        Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<yellow>正在播放：")
+                        .append(Component.text(track.getName(), NamedTextColor.WHITE))
+                        .append(Component.text(" - " + track.getArtists(), NamedTextColor.GRAY))
+                        .append(Component.text(" 点歌人：", NamedTextColor.YELLOW))
+                        .append(Component.text(track.getRequesterName(), NamedTextColor.WHITE)),
+                null);
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
@@ -140,9 +146,9 @@ public class MusicQueue {
 
     private void handleUrlFailed(String reason) {
         consecutiveFails++;
-        Bukkit.broadcastMessage(TextUtil.message(config.getPrefix(), "&c" + reason + "，跳过当前歌曲。"));
+        Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<red>" + reason + "，跳过当前歌曲。"), null);
         if (consecutiveFails >= config.getQueueMaxConsecutiveFails()) {
-            Bukkit.broadcastMessage(TextUtil.message(config.getPrefix(), "&c连续获取失败次数过多，停止播放。"));
+            Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<red>连续获取失败次数过多，停止播放。"), null);
             stop();
             return;
         }
@@ -162,30 +168,41 @@ public class MusicQueue {
     }
 
     public void printQueue(Player player) {
-        player.sendMessage(TextUtil.message(config.getPrefix(), "&e===== 播放队列 ====="));
+        player.sendMessage(TextUtil.message(config.getPrefix(), "<yellow>===== 播放队列 ====="));
         if (currentTrack != null) {
-            player.sendMessage("&a▶ &f" + currentTrack.getName() + " &7- " + currentTrack.getArtists() + " &e点歌人：&f" + currentTrack.getRequesterName());
+            player.sendMessage(Component.text("▶ ", NamedTextColor.GREEN)
+                    .append(Component.text(currentTrack.getName(), NamedTextColor.WHITE))
+                    .append(Component.text(" - " + currentTrack.getArtists(), NamedTextColor.GRAY))
+                    .append(Component.text(" 点歌人：", NamedTextColor.YELLOW))
+                    .append(Component.text(currentTrack.getRequesterName(), NamedTextColor.WHITE)));
         } else {
-            player.sendMessage("&7当前没有播放中的歌曲。");
+            player.sendMessage(TextUtil.parse("<gray>当前没有播放中的歌曲。"));
         }
         int index = 1;
         for (QueuedTrack t : queue) {
-            player.sendMessage("&e" + index + ". &f" + t.getName() + " &7- " + t.getArtists() + " &e点歌人：&f" + t.getRequesterName());
+            player.sendMessage(Component.text(index + ". ", NamedTextColor.YELLOW)
+                    .append(Component.text(t.getName(), NamedTextColor.WHITE))
+                    .append(Component.text(" - " + t.getArtists(), NamedTextColor.GRAY))
+                    .append(Component.text(" 点歌人：", NamedTextColor.YELLOW))
+                    .append(Component.text(t.getRequesterName(), NamedTextColor.WHITE)));
             index++;
         }
         if (queue.isEmpty()) {
-            player.sendMessage("&7队列为空。");
+            player.sendMessage(TextUtil.parse("<gray>队列为空。"));
         }
-        player.sendMessage(TextUtil.message(config.getPrefix(), "&e=================="));
+        player.sendMessage(TextUtil.message(config.getPrefix(), "<yellow>=================="));
     }
 
     public void printNow(Player player) {
         if (currentTrack == null) {
-            player.sendMessage(TextUtil.message(config.getPrefix(), "&7当前没有播放中的歌曲。"));
+            player.sendMessage(TextUtil.message(config.getPrefix(), "<gray>当前没有播放中的歌曲。"));
             return;
         }
-        player.sendMessage(TextUtil.message(config.getPrefix(), "&e当前播放：&f" + currentTrack.getName() + " &7- " + currentTrack.getArtists()));
-        player.sendMessage("&e点歌人：&f" + currentTrack.getRequesterName());
+        player.sendMessage(TextUtil.message(config.getPrefix(), "<yellow>当前播放：")
+                .append(Component.text(currentTrack.getName(), NamedTextColor.WHITE))
+                .append(Component.text(" - " + currentTrack.getArtists(), NamedTextColor.GRAY)));
+        player.sendMessage(Component.text("点歌人：", NamedTextColor.YELLOW)
+                .append(Component.text(currentTrack.getRequesterName(), NamedTextColor.WHITE)));
     }
 
     public void resendToPlayer(Player player) {

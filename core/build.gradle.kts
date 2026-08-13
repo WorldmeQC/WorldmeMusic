@@ -1,6 +1,6 @@
 plugins {
     id("java")
-    id("com.github.johnrengelman.shadow") version "8.1.1"
+    id("com.gradleup.shadow") version "9.3.0"
 }
 
 group = "top.worldme.music"
@@ -20,7 +20,7 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.+")
     compileOnly("com.google.code.gson:gson:2.10.1")
-    implementation(file("../../libs/qrcode-encoder-1.0.0.jar"))
+    implementation("top.mrxiaom:qrcode-encoder:1.0.0")
 }
 
 tasks.withType<JavaCompile> {
@@ -33,5 +33,5 @@ tasks.jar {
 
 tasks.shadowJar {
     archiveFileName.set("WorldmeMusic-${project.version}.jar")
-    relocate("top.worldmeqc", "top.worldme.music.libs.top.worldmeqc")
+    relocate("top.mrxiaom", "top.worldme.music.libs.top.mrxiaom")
 }

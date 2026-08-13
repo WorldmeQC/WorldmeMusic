@@ -1,5 +1,8 @@
 package top.worldme.music.model;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+
 /**
  * 歌曲元数据。
  *
@@ -51,7 +54,9 @@ public class Track {
     /**
      * 格式化显示：序号. 歌名 - 歌手。
      */
-    public String toDisplay(int index) {
-        return "&a" + index + ". &f" + name + " &7- " + artists;
+    public Component toDisplay(int index) {
+        return Component.text(index + ". ", NamedTextColor.GREEN)
+                .append(Component.text(name, NamedTextColor.WHITE))
+                .append(Component.text(" - " + artists, NamedTextColor.GRAY));
     }
 }

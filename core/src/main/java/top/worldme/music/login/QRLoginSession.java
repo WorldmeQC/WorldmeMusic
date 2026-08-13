@@ -12,15 +12,14 @@ public class QRLoginSession {
 
     private final String key;
     private final String qrUrl;
-    private final String token;
     private final long createdAt;
+    private int mapId = -1;
     private BukkitTask pollTask;
     private volatile boolean completed = false;
 
-    public QRLoginSession(String key, String qrUrl, String token) {
+    public QRLoginSession(String key, String qrUrl) {
         this.key = key;
         this.qrUrl = qrUrl;
-        this.token = token;
         this.createdAt = System.currentTimeMillis();
     }
 
@@ -32,12 +31,16 @@ public class QRLoginSession {
         return qrUrl;
     }
 
-    public String getToken() {
-        return token;
-    }
-
     public long getCreatedAt() {
         return createdAt;
+    }
+
+    public int getMapId() {
+        return mapId;
+    }
+
+    public void setMapId(int mapId) {
+        this.mapId = mapId;
     }
 
     public BukkitTask getPollTask() {

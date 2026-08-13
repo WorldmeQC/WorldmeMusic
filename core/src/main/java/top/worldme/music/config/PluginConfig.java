@@ -39,7 +39,7 @@ public class PluginConfig {
     }
 
     public String getPrefix() {
-        return config.getString("prefix", "&b[WorldmeMusic] &r");
+        return config.getString("prefix", "<aqua>[WorldmeMusic] <reset>");
     }
 
     public String getApiBaseUrl() {
@@ -60,18 +60,6 @@ public class PluginConfig {
 
     public boolean isLoginEnabled() {
         return config.getBoolean("login.enabled", true);
-    }
-
-    public int getQrServerPort() {
-        return config.getInt("login.qr-server-port", 8123);
-    }
-
-    public String getQrServerHost() {
-        return config.getString("login.qr-server-host", "0.0.0.0");
-    }
-
-    public String getQrPublicHost() {
-        return config.getString("login.qr-public-host", "");
     }
 
     public int getPollInterval() {

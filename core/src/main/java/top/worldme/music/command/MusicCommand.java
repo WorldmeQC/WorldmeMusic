@@ -1,5 +1,9 @@
 package top.worldme.music.command;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -76,19 +80,19 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
             return;
         }
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(TextUtil.message(config.getPrefix(), "&c该命令只能由玩家执行。"));
+            sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>该命令只能由玩家执行。"));
             return;
         }
         if (args.length < 2) {
-            sender.sendMessage(TextUtil.message(config.getPrefix(), "&c用法：/music search <关键词>"));
+            sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>用法：/music search <关键词>"));
             return;
         }
         String keyword = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
         if (keyword.isBlank()) {
-            sender.sendMessage(TextUtil.message(config.getPrefix(), "&c关键词不能为空。"));
+            sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>关键词不能为空。"));
             return;
         }
-        sender.sendMessage(TextUtil.message(config.getPrefix(), "&e正在搜索：&f" + keyword));
+        sender.sendMessage(TextUtil.message(config.getPrefix(), "<yellow>正在搜索：<white>" + keyword));
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 List<Track> tracks = neteaseClient.search(keyword, config.getApiSearchLimit(), 0).join();
@@ -98,19 +102,34 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
                     session.setLastKeyword(keyword);
                     session.setCurrentOffset(0);
                     if (tracks.isEmpty()) {
-                        player.sendMessage(TextUtil.message(config.getPrefix(), "&c未找到相关歌曲。"));
+                        player.sendMessage(TextUtil.message(config.getPrefix(), "<red>未找到相关歌曲。"));
                         return;
                     }
-                    player.sendMessage(TextUtil.message(config.getPrefix(), "&a搜索 &f" + keyword + " &a结果如下，输入 /music add <序号> 点歌："));
+                    player.sendMessage(TextUtil.message(config.getPrefix(), "<green>搜索 ")
+                            .append(Component.text(keyword, NamedTextColor.WHITE))
+                            .append(TextUtil.parse("<green> 结果如下，点击 [<green>+<yellow>] 或输入 /music add <序号> 点歌：")));
                     int index = 1;
                     for (Track track : tracks) {
-                        player.sendMessage(TextUtil.color(track.toDisplay(index)));
+                        Component addButton = Component.text("[", NamedTextColor.YELLOW)
+                                .append(Component.text("+", NamedTextColor.GREEN))
+                                .append(Component.text("]", NamedTextColor.YELLOW))
+                                .clickEvent(ClickEvent.runCommand("/music add " + index))
+                                .hoverEvent(HoverEvent.showText(Component.text("点击添加这首歌", NamedTextColor.GREEN)));
+                        Component line = track.toDisplay(index)
+                                .append(Component.text(" ", NamedTextColor.YELLOW))
+                                .append(addButton);
+                        player.sendMessage(line);
                         index++;
                     }
                 });
             } catch (Exception e) {
                 Bukkit.getScheduler().runTask(plugin, () -> {
-                    player.sendMessage(TextUtil.message(config.getPrefix(), "&c搜索失败，请检查 API 配置。"));
+                    String cause = e.getCause() != null ? e.getCause().getClass().getSimpleName() : e.getClass().getSimpleName();
+                    String msg = e.getCause() != null && e.getCause().getMessage() != null
+                            ? e.getCause().getMessage()
+                            : e.getMessage();
+                    plugin.getLogger().warning("搜索失败: " + cause + " - " + msg);
+                    player.sendMessage(TextUtil.message(config.getPrefix(), "<red>搜索失败，请检查 API 配置或网络连接。 (<gray>" + cause + "<red>)"));
                     if (config.isDebug()) {
                         e.printStackTrace();
                     }
@@ -125,24 +144,24 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
             return;
         }
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(TextUtil.message(config.getPrefix(), "&c该命令只能由玩家执行。"));
+            sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>该命令只能由玩家执行。"));
             return;
         }
         if (args.length < 2) {
-            sender.sendMessage(TextUtil.message(config.getPrefix(), "&c用法：/music add <序号>"));
+            sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>用法：/music add <序号>"));
             return;
         }
         int index;
         try {
             index = Integer.parseInt(args[1]);
         } catch (NumberFormatException e) {
-            sender.sendMessage(TextUtil.message(config.getPrefix(), "&c序号必须是数字。"));
+            sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>序号必须是数字。"));
             return;
         }
         PlayerSession session = getSession(player.getUniqueId());
         Track track = session.getTrackByIndex(index);
         if (track == null) {
-            sender.sendMessage(TextUtil.message(config.getPrefix(), "&c序号无效，请先搜索。"));
+            sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>序号无效，请先搜索。"));
             return;
         }
         musicQueue.add(track, player);
@@ -154,7 +173,7 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
             return;
         }
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(TextUtil.message(config.getPrefix(), "&c该命令只能由玩家执行。"));
+            sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>该命令只能由玩家执行。"));
             return;
         }
         musicQueue.printQueue(player);
@@ -162,7 +181,7 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
 
     private void handleSkip(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(TextUtil.message(config.getPrefix(), "&c该命令只能由玩家执行。"));
+            sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>该命令只能由玩家执行。"));
             return;
         }
         if (args.length > 1 && "force".equalsIgnoreCase(args[1])) {
@@ -186,7 +205,7 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
             return;
         }
         musicQueue.stop();
-        Bukkit.broadcastMessage(TextUtil.message(config.getPrefix(), "&e管理员已停止播放。"));
+        Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<yellow>管理员已停止播放。"), null);
     }
 
     private void handleNow(CommandSender sender) {
@@ -195,7 +214,7 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
             return;
         }
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(TextUtil.message(config.getPrefix(), "&c该命令只能由玩家执行。"));
+            sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>该命令只能由玩家执行。"));
             return;
         }
         musicQueue.printNow(player);
@@ -207,11 +226,11 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
             return;
         }
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(TextUtil.message(config.getPrefix(), "&c该命令只能由玩家执行。"));
+            sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>该命令只能由玩家执行。"));
             return;
         }
         if (args.length < 2) {
-            sender.sendMessage(TextUtil.message(config.getPrefix(), "&c用法：/music login <qr|status|refresh>"));
+            sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>用法：/music login <qr|status|refresh>"));
             return;
         }
         String action = args[1].toLowerCase(Locale.ROOT);
@@ -219,7 +238,7 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
             case "qr" -> loginManager.startQrLogin(player);
             case "status" -> loginManager.printStatus(player);
             case "refresh" -> loginManager.refresh(player);
-            default -> sender.sendMessage(TextUtil.message(config.getPrefix(), "&c用法：/music login <qr|status|refresh>"));
+            default -> sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>用法：/music login <qr|status|refresh>"));
         }
     }
 
@@ -241,28 +260,28 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
             return;
         }
         config.reload();
-        sender.sendMessage(TextUtil.message(config.getPrefix(), "&a配置已重载。"));
+        sender.sendMessage(TextUtil.message(config.getPrefix(), "<green>配置已重载。"));
     }
 
     private void sendHelp(CommandSender sender) {
-        sender.sendMessage(TextUtil.message(config.getPrefix(), "&e===== WorldmeMusic ====="));
-        sender.sendMessage("&e/music search <关键词> &7- 搜索歌曲");
-        sender.sendMessage("&e/music add <序号> &7- 点歌");
-        sender.sendMessage("&e/music queue &7- 查看队列");
-        sender.sendMessage("&e/music skip &7- 投票切歌");
-        sender.sendMessage("&e/music now &7- 当前歌曲");
+        sender.sendMessage(TextUtil.message(config.getPrefix(), "<yellow>===== WorldmeMusic ====="));
+        sender.sendMessage(TextUtil.parse("<yellow>/music search <关键词> <gray>- 搜索歌曲"));
+        sender.sendMessage(TextUtil.parse("<yellow>/music add <序号> <gray>- 点歌"));
+        sender.sendMessage(TextUtil.parse("<yellow>/music queue <gray>- 查看队列"));
+        sender.sendMessage(TextUtil.parse("<yellow>/music skip <gray>- 投票切歌"));
+        sender.sendMessage(TextUtil.parse("<yellow>/music now <gray>- 当前歌曲"));
         if (sender.hasPermission("worldmemusic.admin")) {
-            sender.sendMessage("&e/music skip force &7- 强制切歌");
-            sender.sendMessage("&e/music stop &7- 停止播放");
-            sender.sendMessage("&e/music login qr &7- 扫码登录");
-            sender.sendMessage("&e/music logout &7- 退出登录");
-            sender.sendMessage("&e/music reload &7- 重载配置");
+            sender.sendMessage(TextUtil.parse("<yellow>/music skip force <gray>- 强制切歌"));
+            sender.sendMessage(TextUtil.parse("<yellow>/music stop <gray>- 停止播放"));
+            sender.sendMessage(TextUtil.parse("<yellow>/music login qr <gray>- 扫码登录"));
+            sender.sendMessage(TextUtil.parse("<yellow>/music logout <gray>- 退出登录"));
+            sender.sendMessage(TextUtil.parse("<yellow>/music reload <gray>- 重载配置"));
         }
-        sender.sendMessage(TextUtil.message(config.getPrefix(), "&e======================"));
+        sender.sendMessage(TextUtil.message(config.getPrefix(), "<yellow>======================"));
     }
 
-    private String noPermission() {
-        return TextUtil.message(config.getPrefix(), "&c你没有权限执行此命令。");
+    private Component noPermission() {
+        return TextUtil.message(config.getPrefix(), "<red>你没有权限执行此命令。");
     }
 
     private PlayerSession getSession(UUID uuid) {
