@@ -106,6 +106,23 @@ public class PluginConfig {
         return config.getString("mod.channel-allmusic", "allmusic:channel");
     }
 
+    public boolean isBossBarEnabled() {
+        return config.getBoolean("bossbar.enabled", true);
+    }
+
+    public int getBossBarUpdateInterval() {
+        return config.getInt("bossbar.update-interval-seconds", 1);
+    }
+
+    public net.kyori.adventure.bossbar.BossBar.Color getBossBarColor() {
+        String value = config.getString("bossbar.color", "blue");
+        try {
+            return net.kyori.adventure.bossbar.BossBar.Color.valueOf(value.toUpperCase());
+        } catch (Exception e) {
+            return net.kyori.adventure.bossbar.BossBar.Color.BLUE;
+        }
+    }
+
     public boolean isDebug() {
         return config.getBoolean("debug", false);
     }

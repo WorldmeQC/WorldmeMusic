@@ -61,6 +61,7 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
         String sub = args[0].toLowerCase(Locale.ROOT);
         switch (sub) {
             case "search" -> handleSearch(sender, args);
+            case "page" -> handleSearchPage(sender, args);
             case "add" -> handleAdd(sender, args);
             case "queue" -> handleQueue(sender);
             case "skip" -> handleSkip(sender, args);
@@ -92,22 +93,68 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
             sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>关键词不能为空。"));
             return;
         }
-        sender.sendMessage(TextUtil.message(config.getPrefix(), "<yellow>正在搜索：<white>" + keyword));
+        PlayerSession session = getSession(player.getUniqueId());
+        session.setLastKeyword(keyword);
+        session.setCurrentOffset(0);
+        performSearch(player, keyword, 0);
+    }
+
+    private void handleSearchPage(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("worldmemusic.search")) {
+            sender.sendMessage(noPermission());
+            return;
+        }
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>该命令只能由玩家执行。"));
+            return;
+        }
+        if (args.length < 2) {
+            sender.sendMessage(TextUtil.message(config.getPrefix(), "<red>用法：/music page <next|prev>"));
+            return;
+        }
+        PlayerSession session = getSession(player.getUniqueId());
+        String keyword = session.getLastKeyword();
+        if (keyword.isBlank()) {
+            player.sendMessage(TextUtil.message(config.getPrefix(), "<red>请先使用 /music search <关键词> 进行搜索。"));
+            return;
+        }
+        int limit = config.getApiSearchLimit();
+        int currentOffset = session.getCurrentOffset();
+        int newOffset;
+        String action = args[1].toLowerCase(Locale.ROOT);
+        switch (action) {
+            case "next", "n" -> newOffset = currentOffset + limit;
+            case "prev", "previous", "p" -> newOffset = Math.max(0, currentOffset - limit);
+            default -> {
+                player.sendMessage(TextUtil.message(config.getPrefix(), "<red>用法：/music page <next|prev>"));
+                return;
+            }
+        }
+        performSearch(player, keyword, newOffset);
+    }
+
+    private void performSearch(Player player, String keyword, int offset) {
+        player.sendMessage(TextUtil.message(config.getPrefix(), "<yellow>正在搜索：<white>" + keyword));
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                List<Track> tracks = neteaseClient.search(keyword, config.getApiSearchLimit(), 0).join();
+                List<Track> tracks = neteaseClient.search(keyword, config.getApiSearchLimit(), offset).join();
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     PlayerSession session = getSession(player.getUniqueId());
                     session.setLastSearch(tracks);
                     session.setLastKeyword(keyword);
-                    session.setCurrentOffset(0);
+                    session.setCurrentOffset(offset);
                     if (tracks.isEmpty()) {
-                        player.sendMessage(TextUtil.message(config.getPrefix(), "<red>未找到相关歌曲。"));
+                        if (offset > 0) {
+                            player.sendMessage(TextUtil.message(config.getPrefix(), "<red>没有更多结果了。"));
+                        } else {
+                            player.sendMessage(TextUtil.message(config.getPrefix(), "<red>未找到相关歌曲。"));
+                        }
                         return;
                     }
+                    int page = offset / config.getApiSearchLimit() + 1;
                     player.sendMessage(TextUtil.message(config.getPrefix(), "<green>搜索 ")
                             .append(Component.text(keyword, NamedTextColor.WHITE))
-                            .append(TextUtil.parse("<green> 结果如下，点击 [<green>+<yellow>] 或输入 /music add <序号> 点歌：")));
+                            .append(TextUtil.parse("<green> 第 <yellow>" + page + " <green>页结果如下，点击 [<green>+<yellow>] 或输入 /music add <序号> 点歌：")));
                     int index = 1;
                     for (Track track : tracks) {
                         Component addButton = Component.text("[", NamedTextColor.YELLOW)
@@ -121,6 +168,7 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
                         player.sendMessage(line);
                         index++;
                     }
+                    sendSearchFooter(player, offset, page);
                 });
             } catch (Exception e) {
                 Bukkit.getScheduler().runTask(plugin, () -> {
@@ -136,6 +184,25 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
                 });
             }
         });
+    }
+
+    private void sendSearchFooter(Player player, int offset, int page) {
+        int limit = config.getApiSearchLimit();
+        Component footer = Component.text("", NamedTextColor.WHITE);
+        if (offset > 0) {
+            Component prevButton = Component.text("[上一页]", NamedTextColor.YELLOW)
+                    .clickEvent(ClickEvent.runCommand("/music page prev"))
+                    .hoverEvent(HoverEvent.showText(Component.text("点击上一页", NamedTextColor.YELLOW)));
+            footer = footer.append(prevButton).append(Component.text("  ", NamedTextColor.WHITE));
+        }
+        Component nextButton = Component.text("[下一页]", NamedTextColor.YELLOW)
+                .clickEvent(ClickEvent.runCommand("/music page next"))
+                .hoverEvent(HoverEvent.showText(Component.text("点击下一页", NamedTextColor.YELLOW)));
+        footer = footer.append(nextButton)
+                .append(Component.text("  第 ", NamedTextColor.GRAY))
+                .append(Component.text(String.valueOf(page), NamedTextColor.YELLOW))
+                .append(Component.text(" 页", NamedTextColor.GRAY));
+        player.sendMessage(footer);
     }
 
     private void handleAdd(CommandSender sender, String[] args) {
@@ -205,7 +272,7 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
             return;
         }
         musicQueue.stop();
-        Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<yellow>管理员已停止播放。"), null);
+        Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<yellow>管理员已停止播放。"));
     }
 
     private void handleNow(CommandSender sender) {
@@ -266,6 +333,7 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
     private void sendHelp(CommandSender sender) {
         sender.sendMessage(TextUtil.message(config.getPrefix(), "<yellow>===== WorldmeMusic ====="));
         sender.sendMessage(TextUtil.parse("<yellow>/music search <关键词> <gray>- 搜索歌曲"));
+        sender.sendMessage(TextUtil.parse("<yellow>/music page <next|prev> <gray>- 翻页"));
         sender.sendMessage(TextUtil.parse("<yellow>/music add <序号> <gray>- 点歌"));
         sender.sendMessage(TextUtil.parse("<yellow>/music queue <gray>- 查看队列"));
         sender.sendMessage(TextUtil.parse("<yellow>/music skip <gray>- 投票切歌"));
@@ -295,11 +363,16 @@ public class MusicCommand implements CommandExecutor, TabExecutor {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            List<String> list = new ArrayList<>(Arrays.asList("search", "add", "queue", "skip", "now"));
+            List<String> list = new ArrayList<>(Arrays.asList("search", "page", "add", "queue", "skip", "now"));
             if (sender.hasPermission("worldmemusic.admin")) {
                 list.addAll(Arrays.asList("stop", "login", "logout", "reload"));
             }
             return list.stream().filter(s -> s.startsWith(args[0].toLowerCase(Locale.ROOT))).collect(Collectors.toList());
+        }
+        if (args.length == 2 && "page".equalsIgnoreCase(args[0])) {
+            return Stream.of("next", "prev")
+                    .filter(s -> s.startsWith(args[1].toLowerCase(Locale.ROOT)))
+                    .collect(Collectors.toList());
         }
         if (args.length == 2 && "login".equalsIgnoreCase(args[0]) && sender.hasPermission("worldmemusic.admin")) {
             return Stream.of("qr", "status", "refresh")

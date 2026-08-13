@@ -26,4 +26,9 @@ mod:
   send-allmusic: true
   channel-allmusic: "allmusic:channel"
 
+bossbar:
+  enabled: true
+  update-interval-seconds: 1
+  color: "blue"
+
 debug: false

@@ -67,8 +67,7 @@ public class VoteSkipManager {
 
         Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<yellow>玩家 ")
                         .append(Component.text(starter.getName(), NamedTextColor.WHITE))
-                        .append(TextUtil.parse("<yellow> 发起了切歌投票，<green>" + config.getVoteDurationSeconds() + " <yellow>秒内输入 /music skip 同意。")),
-                null);
+                        .append(TextUtil.parse("<yellow> 发起了切歌投票，<green>" + config.getVoteDurationSeconds() + " <yellow>秒内输入 /music skip 同意。")));
         broadcastProgress();
 
         if (checkThreshold()) {
@@ -83,7 +82,7 @@ public class VoteSkipManager {
     private void broadcastProgress() {
         int online = Bukkit.getOnlinePlayers().size();
         int need = getRequiredVotes(online);
-        Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<yellow>当前 <white>" + voters.size() + "/" + online + " <yellow>票，还需 <white>" + Math.max(0, need - voters.size()) + " <yellow>票切歌。"), null);
+        Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<yellow>当前 <white>" + voters.size() + "/" + online + " <yellow>票，还需 <white>" + Math.max(0, need - voters.size()) + " <yellow>票切歌。"));
     }
 
     private int getRequiredVotes(int online) {
@@ -105,7 +104,7 @@ public class VoteSkipManager {
             Bukkit.getScheduler().cancelTask(taskId);
             taskId = -1;
         }
-        Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<green>投票通过，切换下一首！"), null);
+        Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<green>投票通过，切换下一首！"));
         musicQueue.playNext();
     }
 
@@ -115,6 +114,6 @@ public class VoteSkipManager {
         }
         voting = false;
         taskId = -1;
-        Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<red>投票未通过，继续播放当前歌曲。"), null);
+        Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<red>投票未通过，继续播放当前歌曲。"));
     }
 }

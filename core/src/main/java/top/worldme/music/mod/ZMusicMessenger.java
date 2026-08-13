@@ -46,6 +46,9 @@ public class ZMusicMessenger {
     }
 
     private void sendRaw(Player player, byte[] payload) {
+        if (!plugin.isEnabled()) {
+            return;
+        }
         player.sendPluginMessage(plugin, config.getChannelZmusic(), payload);
         if (config.isSendAllmusic()) {
             player.sendPluginMessage(plugin, config.getChannelAllmusic(), payload);

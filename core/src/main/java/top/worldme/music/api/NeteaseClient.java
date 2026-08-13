@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import top.worldme.music.config.PluginConfig;
 import top.worldme.music.login.LoginManager;
+import top.worldme.music.model.Lyrics;
 import top.worldme.music.model.Track;
 import top.worldme.music.util.JsonUtil;
 
@@ -70,6 +71,14 @@ public class NeteaseClient {
     public CompletableFuture<Long> getSongDuration(long songId) {
         String path = "/song/detail?ids=" + songId;
         return get(path).thenApply(this::parseSongDuration);
+    }
+
+    /**
+     * 获取歌词。
+     */
+    public CompletableFuture<Lyrics> getLyrics(long songId) {
+        String path = "/lyric?id=" + songId;
+        return get(path).thenApply(this::parseLyrics);
     }
 
     /**
@@ -246,6 +255,12 @@ public class NeteaseClient {
         }
         JsonObject first = songs.get(0).getAsJsonObject();
         return JsonUtil.getLong(first, "dt", 0L);
+    }
+
+    private Lyrics parseLyrics(JsonObject json) {
+        JsonObject lrc = JsonUtil.getObject(json, "lrc");
+        String lyric = JsonUtil.getString(lrc, "lyric", "");
+        return Lyrics.parse(lyric);
     }
 
     private QrCheckResult parseQrCheck(JsonObject json) {
