@@ -16,11 +16,6 @@ subprojects {
         maven("https://repo.papermc.io/repository/maven-public/")
         maven("https://repo.momirealms.net/releases/")
     }
-
-    tasks.withType<Jar> {
-        // 用子项目名作为 jar 名，去掉默认版本号
-        archiveFileName.set("LoebaServer-${project.name}-${project.version}.jar")
-    }
 }
 
 

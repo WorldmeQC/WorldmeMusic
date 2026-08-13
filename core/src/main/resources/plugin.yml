@@ -1,0 +1,51 @@
+name: WorldmeMusic
+main: top.worldme.music.WorldmeMusicPlugin
+version: ${version}
+api-version: "1.21"
+author: Worldme
+description: A Bukkit music plugin for zmusic-mod using Netease Cloud API.
+
+commands:
+  music:
+    description: WorldmeMusic main command
+    usage: /music <subcommand>
+    aliases:
+      - zm
+    permission: worldmemusic.use
+
+permissions:
+  worldmemusic.*:
+    default: op
+    description: All WorldmeMusic permissions
+    children:
+      worldmemusic.user: true
+      worldmemusic.admin: true
+  worldmemusic.user:
+    default: true
+    description: Basic player commands
+    children:
+      worldmemusic.search: true
+      worldmemusic.add: true
+      worldmemusic.queue: true
+      worldmemusic.skip: true
+      worldmemusic.now: true
+  worldmemusic.search:
+    default: true
+    description: Search songs
+  worldmemusic.add:
+    default: true
+    description: Add song to queue
+  worldmemusic.queue:
+    default: true
+    description: View music queue
+  worldmemusic.skip:
+    default: true
+    description: Vote to skip current song
+  worldmemusic.now:
+    default: true
+    description: Show current playing song
+  worldmemusic.admin:
+    default: op
+    description: Administrator commands
+    children:
+      worldmemusic.user: true

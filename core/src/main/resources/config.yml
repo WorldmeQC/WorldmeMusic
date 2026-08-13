@@ -1,0 +1,32 @@
+prefix: "&b[WorldmeMusic] &r"
+
+api:
+  base-url: "http://localhost:3000"
+  timeout-seconds: 10
+  search-limit: 10
+  sound-quality: "exhigh"
+
+login:
+  enabled: true
+  qr-server-port: 8123
+  qr-server-host: "0.0.0.0"
+  qr-public-host: ""
+  poll-interval: 3
+  qr-timeout: 180
+  qr-cell-size: 4
+  qr-margin: 6
+
+vote:
+  duration-seconds: 10
+  threshold-ratio: 0.5
+
+queue:
+  max-size: 50
+  max-consecutive-fails: 3
+
+mod:
+  channel-zmusic: "zmusic:channel"
+  send-allmusic: true
+  channel-allmusic: "allmusic:channel"
+
+debug: false
