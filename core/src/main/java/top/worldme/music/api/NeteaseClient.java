@@ -18,7 +18,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -159,6 +162,109 @@ public class NeteaseClient {
             sb.append("&cookie=").append(encode(cookie));
         }
         return sb.toString();
+    }
+
+    private String buildUrlWithoutCookie(String path) {
+        String baseUrl = config.getApiBaseUrl();
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+        StringBuilder sb = new StringBuilder(baseUrl);
+        if (path.startsWith("/")) {
+            sb.append(path);
+        } else {
+            sb.append("/").append(path);
+        }
+        char sep = path.contains("?") ? '&' : '?';
+        sb.append(sep).append("timestamp=").append(System.currentTimeMillis());
+        return sb.toString();
+    }
+
+    /**
+     * 通用 POST。
+     */
+    public CompletableFuture<JsonObject> post(String path, String body, String headerCookie) {
+        String url = buildUrlWithoutCookie(path);
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
+                .timeout(Duration.ofSeconds(config.getApiTimeoutSeconds()))
+                .header("User-Agent", "WorldmeMusic/1.0.0")
+                .header("Content-Type", "application/json");
+        if (headerCookie != null && !headerCookie.isBlank()) {
+            builder = builder.header("Cookie", headerCookie);
+        }
+        HttpRequest request = builder
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                .build();
+        return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                        throw new RuntimeException("HTTP " + response.statusCode());
+                    }
+                    String responseBody = response.body();
+                    if (responseBody == null || responseBody.isBlank()) {
+                        return new JsonObject();
+                    }
+                    return JsonUtil.parseObject(responseBody);
+                });
+    }
+
+    /**
+     * 获取登录状态，返回昵称与用户 ID。
+     */
+    public CompletableFuture<LoginStatusResult> fetchLoginStatus(String rawCookie) {
+        if (rawCookie == null || rawCookie.isBlank()) {
+            return CompletableFuture.completedFuture(new LoginStatusResult(-1, 0, ""));
+        }
+        String headerCookie = toHeaderCookie(rawCookie);
+        JsonObject bodyObj = new JsonObject();
+        bodyObj.addProperty("cookie", rawCookie);
+        String body = bodyObj.toString();
+        return post("/login/status", body, headerCookie)
+                .thenApply(this::parseLoginStatus);
+    }
+
+    private LoginStatusResult parseLoginStatus(JsonObject json) {
+        JsonObject data = JsonUtil.getObject(json, "data");
+        int code = JsonUtil.getInt(data, "code", -1);
+        JsonObject profile = JsonUtil.getObject(data, "profile");
+        long userId = JsonUtil.getLong(profile, "userId", 0);
+        String nickname = JsonUtil.getString(profile, "nickname", "");
+        if (userId == 0) {
+            JsonObject account = JsonUtil.getObject(data, "account");
+            userId = JsonUtil.getLong(account, "id", 0);
+        }
+        return new LoginStatusResult(code, userId, nickname);
+    }
+
+    /**
+     * 将后端返回的 Set-Cookie 风格字符串整理成标准 Cookie Header 格式。
+     */
+    private String toHeaderCookie(String rawCookie) {
+        Set<String> segments = new LinkedHashSet<>();
+        String[] parts = rawCookie.split(";");
+        for (String part : parts) {
+            String trimmed = part.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            int eq = trimmed.indexOf('=');
+            if (eq <= 0) {
+                continue;
+            }
+            String name = trimmed.substring(0, eq).trim();
+            if (name.isEmpty()) {
+                continue;
+            }
+            String lower = name.toLowerCase(Locale.ROOT);
+            if (lower.equals("max-age") || lower.equals("expires")
+                    || lower.equals("path") || lower.equals("domain")
+                    || lower.equals("secure") || lower.equals("httponly")
+                    || lower.equals("samesite")) {
+                continue;
+            }
+            segments.add(trimmed);
+        }
+        return String.join("; ", segments);
     }
 
     private String encode(String value) {
@@ -325,6 +431,33 @@ public class NeteaseClient {
 
         public long getUserId() {
             return userId;
+        }
+    }
+
+    /**
+     * 登录状态查询结果。
+     */
+    public static class LoginStatusResult {
+        private final int code;
+        private final long userId;
+        private final String nickname;
+
+        public LoginStatusResult(int code, long userId, String nickname) {
+            this.code = code;
+            this.userId = userId;
+            this.nickname = nickname;
+        }
+
+        public int getCode() {
+            return code;
+        }
+
+        public long getUserId() {
+            return userId;
+        }
+
+        public String getNickname() {
+            return nickname;
         }
     }
 }

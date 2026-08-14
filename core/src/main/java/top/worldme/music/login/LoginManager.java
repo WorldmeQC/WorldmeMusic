@@ -235,9 +235,35 @@ public class LoginManager {
                         case 803 -> {
                             session.cancel();
                             removeQrMap(admin, session.getMapId());
-                            saveLogin(result.getCookie(), result.getNickname(), result.getUserId());
-                            admin.sendMessage(TextUtil.message(config.getPrefix(), "<green>登录成功！昵称: ")
-                                    .append(Component.text(result.getNickname(), NamedTextColor.WHITE)));
+                            String cookie = result.getCookie();
+                            if (cookie == null || cookie.isBlank()) {
+                                admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>登录授权成功，但未获取到 Cookie，请重新扫码。"));
+                                return;
+                            }
+                            admin.sendMessage(TextUtil.message(config.getPrefix(), "<green>授权成功，正在获取用户信息..."));
+                            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                                neteaseClient.fetchLoginStatus(cookie)
+                                        .thenAccept(status -> Bukkit.getScheduler().runTask(plugin, () -> {
+                                            if (status.getCode() == 200 && status.getUserId() > 0) {
+                                                saveLogin(cookie, status.getNickname(), status.getUserId());
+                                                admin.sendMessage(TextUtil.message(config.getPrefix(), "<green>登录成功！昵称: ")
+                                                        .append(Component.text(status.getNickname(), NamedTextColor.WHITE)));
+                                            } else {
+                                                clearLogin();
+                                                admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>获取用户信息失败，请重新扫码登录。"));
+                                            }
+                                        }))
+                                        .exceptionally(ex -> {
+                                            Bukkit.getScheduler().runTask(plugin, () -> {
+                                                clearLogin();
+                                                admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>获取用户信息异常，请重新扫码登录。"));
+                                                if (config.isDebug()) {
+                                                    ex.printStackTrace();
+                                                }
+                                            });
+                                            return null;
+                                        });
+                            });
                         }
                         default -> {
                             // 未知状态，忽略
@@ -259,6 +285,14 @@ public class LoginManager {
         save();
     }
 
+    private void clearLogin() {
+        accountInfo.setCookie("");
+        accountInfo.setNickname("");
+        accountInfo.setUserId(0);
+        accountInfo.setLoginTime(0);
+        save();
+    }
+
     public void cancelActiveSession() {
         if (activeSession != null) {
             activeSession.cancel();
@@ -271,13 +305,38 @@ public class LoginManager {
             admin.sendMessage(TextUtil.message(config.getPrefix(), "<gray>当前未登录。"));
             return;
         }
-        admin.sendMessage(TextUtil.message(config.getPrefix(), "<green>已登录账号"));
-        admin.sendMessage(Component.text("昵称: ", NamedTextColor.GRAY)
-                .append(Component.text(accountInfo.getNickname(), NamedTextColor.WHITE)));
-        admin.sendMessage(Component.text("用户 ID: ", NamedTextColor.GRAY)
-                .append(Component.text(String.valueOf(accountInfo.getUserId()), NamedTextColor.WHITE)));
-        admin.sendMessage(Component.text("登录时间: ", NamedTextColor.GRAY)
-                .append(Component.text(formatTime(accountInfo.getLoginTime()), NamedTextColor.WHITE)));
+        admin.sendMessage(TextUtil.message(config.getPrefix(), "<yellow>正在查询登录状态..."));
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            neteaseClient.fetchLoginStatus(accountInfo.getCookie())
+                    .thenAccept(status -> Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (status.getCode() == 200 && status.getUserId() > 0) {
+                            accountInfo.setNickname(status.getNickname());
+                            accountInfo.setUserId(status.getUserId());
+                            accountInfo.setLoginTime(System.currentTimeMillis());
+                            save();
+                            admin.sendMessage(TextUtil.message(config.getPrefix(), "<green>已登录账号"));
+                            admin.sendMessage(Component.text("昵称: ", NamedTextColor.GRAY)
+                                    .append(Component.text(accountInfo.getNickname(), NamedTextColor.WHITE)));
+                            admin.sendMessage(Component.text("用户 ID: ", NamedTextColor.GRAY)
+                                    .append(Component.text(String.valueOf(accountInfo.getUserId()), NamedTextColor.WHITE)));
+                            admin.sendMessage(Component.text("登录时间: ", NamedTextColor.GRAY)
+                                    .append(Component.text(formatTime(accountInfo.getLoginTime()), NamedTextColor.WHITE)));
+                        } else {
+                            clearLogin();
+                            admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>登录状态已失效，请重新扫码登录。"));
+                        }
+                    }))
+                    .exceptionally(ex -> {
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            clearLogin();
+                            admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>查询登录状态异常，已清除登录信息，请重新扫码登录。"));
+                            if (config.isDebug()) {
+                                ex.printStackTrace();
+                            }
+                        });
+                        return null;
+                    });
+        });
     }
 
     public void refresh(Player admin) {
@@ -289,15 +348,36 @@ public class LoginManager {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 boolean ok = neteaseClient.refreshLogin().join();
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (ok) {
-                        accountInfo.setLoginTime(System.currentTimeMillis());
-                        save();
-                        admin.sendMessage(TextUtil.message(config.getPrefix(), "<green>刷新成功。"));
-                    } else {
-                        admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>刷新失败，请重新登录。"));
-                    }
-                });
+                if (!ok) {
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        clearLogin();
+                        admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>刷新失败，请重新扫码登录。"));
+                    });
+                    return;
+                }
+                neteaseClient.fetchLoginStatus(accountInfo.getCookie())
+                        .thenAccept(status -> Bukkit.getScheduler().runTask(plugin, () -> {
+                            if (status.getCode() == 200 && status.getUserId() > 0) {
+                                accountInfo.setLoginTime(System.currentTimeMillis());
+                                accountInfo.setNickname(status.getNickname());
+                                accountInfo.setUserId(status.getUserId());
+                                save();
+                                admin.sendMessage(TextUtil.message(config.getPrefix(), "<green>刷新成功。"));
+                            } else {
+                                clearLogin();
+                                admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>刷新后获取用户信息失败，请重新扫码登录。"));
+                            }
+                        }))
+                        .exceptionally(ex -> {
+                            Bukkit.getScheduler().runTask(plugin, () -> {
+                                clearLogin();
+                                admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>刷新后获取用户信息异常，请重新扫码登录。"));
+                                if (config.isDebug()) {
+                                    ex.printStackTrace();
+                                }
+                            });
+                            return null;
+                        });
             } catch (Exception e) {
                 Bukkit.getScheduler().runTask(plugin, () ->
                         admin.sendMessage(TextUtil.message(config.getPrefix(), "<red>刷新异常: ")
