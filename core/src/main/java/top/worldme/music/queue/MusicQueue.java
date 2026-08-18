@@ -62,12 +62,16 @@ public class MusicQueue {
             return;
         }
         QueuedTrack queued = new QueuedTrack(track, requester);
+        queue.add(queued);
         if (!playing || currentTrack == null) {
-            queue.add(queued);
+            Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<yellow>玩家 ")
+                            .append(Component.text(requester.getName(), NamedTextColor.WHITE))
+                            .append(TextUtil.parse("<yellow> 点了 <green>" + track.getName() + " <yellow>- <gray>" + track.getArtists() + " <yellow>，即将播放。")));
             playNext();
         } else {
-            queue.add(queued);
-            requester.sendMessage(TextUtil.message(config.getPrefix(), "<green>已加入队列，当前排在第 <yellow>" + queue.size() + " <green>位。"));
+            Bukkit.broadcast(TextUtil.message(config.getPrefix(), "<yellow>玩家 ")
+                            .append(Component.text(requester.getName(), NamedTextColor.WHITE))
+                            .append(TextUtil.parse("<yellow> 点了 <green>" + track.getName() + " <yellow>- <gray>" + track.getArtists() + " <yellow>，当前排在第 <white>" + queue.size() + " <yellow>位。")));
         }
     }
 

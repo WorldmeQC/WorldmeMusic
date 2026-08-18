@@ -18,12 +18,17 @@ permissions:
     default: op
     description: All WorldmeMusic permissions
     children:
+      worldmemusic.use: true
       worldmemusic.user: true
       worldmemusic.admin: true
+  worldmemusic.use:
+    default: true
+    description: Allow using the /music command
   worldmemusic.user:
     default: true
     description: Basic player commands
     children:
+      worldmemusic.use: true
       worldmemusic.search: true
       worldmemusic.add: true
       worldmemusic.queue: true
@@ -48,4 +53,5 @@ permissions:
     default: op
     description: Administrator commands
     children:
+      worldmemusic.use: true
       worldmemusic.user: true
